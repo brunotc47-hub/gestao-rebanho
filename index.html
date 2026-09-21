@@ -593,12 +593,13 @@
   <div id="aba-backup" class="panel">
     <div class="card" style="margin-bottom:16px;">
       <h2>Backup dos dados</h2>
-      <p class="hint">Os dados ficam salvos só neste navegador/aparelho. Baixe um backup regularmente para não correr o risco de perder o cadastro.</p>
-      <button class="btn btn-primary" onclick="exportarBackup()">Baixar backup (.json)</button>
+      <p class="hint">Os dados ficam salvos só neste aparelho. Gere um backup e salve na sua nuvem (Google Drive, OneDrive, iCloud, e-mail...) pra nunca perder o cadastro nem depender deste celular.</p>
+      <button class="btn btn-primary" onclick="exportarBackup()">📤 Gerar backup e salvar</button>
+      <p id="msg-backup-export" class="msg"></p>
     </div>
     <div class="card">
       <h2>Restaurar backup</h2>
-      <p class="hint">Isso substitui todos os animais cadastrados atualmente pelos dados do arquivo de backup.</p>
+      <p class="hint">Isso substitui todos os animais e a Ficha CIDASC atuais pelos dados do arquivo de backup.</p>
       <input type="file" id="input-restaurar" accept="application/json" style="margin-bottom:10px;">
       <div>
         <button class="btn btn-secondary" onclick="restaurarBackup()">Restaurar</button>
@@ -1847,17 +1848,29 @@
     leitor.readAsText(arquivo, 'UTF-8');
   }
 
-  function exportarBackup() {
-    const blob = new Blob([JSON.stringify(animais, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+  async function exportarBackup() {
+    const dados = { versaoBackup: 2, exportadoEm: new Date().toISOString(), animais, fichaTB };
     const data = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `backup-rebanho-${data}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const nomeArquivo = `backup-rebanho-${data}.json`;
+    const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+    const msg = document.getElementById('msg-backup-export');
+
+    let arquivo = null;
+    try { arquivo = new File([blob], nomeArquivo, { type: 'application/json' }); } catch { arquivo = null; }
+
+    if (arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      try {
+        await navigator.share({ files: [arquivo], title: 'Backup - Gestão de Rebanho', text: 'Backup dos dados do rebanho' });
+        if (msg) { msg.textContent = 'Backup gerado! Na tela que abriu, escolha onde guardar (Google Drive, OneDrive, iCloud/Arquivos, e-mail...).'; msg.className = 'msg ok'; }
+        return;
+      } catch (erro) {
+        if (erro && erro.name === 'AbortError') return; // usuário cancelou o compartilhamento
+        // se der outro erro, cai para o download comum abaixo
+      }
+    }
+
+    baixarBlobComoArquivo(blob, nomeArquivo);
+    if (msg) { msg.textContent = 'Backup baixado no aparelho! Depois mova esse arquivo pra sua nuvem (Google Drive, OneDrive, iCloud) pelo app de Arquivos do celular.'; msg.className = 'msg ok'; }
   }
 
   function restaurarBackup() {
@@ -1871,11 +1884,34 @@
     const leitor = new FileReader();
     leitor.onload = (evento) => {
       try {
-        const dados = JSON.parse(evento.target.result);
-        if (!Array.isArray(dados)) throw new Error('formato inválido');
-        dados.forEach(a => { if (!a.id) a.id = gerarId(); });
-        if (!confirm(`Isso vai substituir os ${animais.length} animal(is) atual(is) por ${dados.length} do backup. Continuar?`)) return;
-        animais = dados;
+        const bruto = JSON.parse(evento.target.result);
+        let dadosAnimais, dadosFicha = null;
+
+        if (Array.isArray(bruto)) {
+          dadosAnimais = bruto; // backup antigo, só animais
+        } else if (bruto && Array.isArray(bruto.animais)) {
+          dadosAnimais = bruto.animais;
+          dadosFicha = bruto.fichaTB || null;
+        } else {
+          throw new Error('formato inválido');
+        }
+
+        dadosAnimais.forEach(a => { if (!a.id) a.id = gerarId(); });
+
+        const avisoFicha = dadosFicha ? ' e a Ficha CIDASC atual' : '';
+        if (!confirm(`Isso vai substituir os ${animais.length} animal(is) atual(is)${avisoFicha} pelos dados do backup (${dadosAnimais.length} animal(is)). Continuar?`)) return;
+
+        animais = dadosAnimais;
+        if (dadosFicha) {
+          fichaTB = dadosFicha;
+          if (!fichaTB.header) fichaTB.header = {};
+          if (!Array.isArray(fichaTB.linhas)) fichaTB.linhas = [];
+          while (fichaTB.linhas.length < FICHA_TB_LINHAS_TOTAL) fichaTB.linhas.push(criarLinhaFichaTBVazia());
+          salvarFichaTB();
+          preencherHeaderFichaTB();
+          renderFichaTBCorpo();
+        }
+
         if (salvarLista()) {
           msg.textContent = 'Backup restaurado com sucesso!';
           msg.className = 'msg ok';
