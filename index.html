@@ -234,6 +234,27 @@
   table.ficha-tb-table input:focus, table.ficha-tb-table select:focus { outline: 1px solid var(--focus-ring); background: var(--surface); }
   table.ficha-tb-table td.delta-calc { background: var(--surface-2); color: var(--text-muted); font-family: monospace; }
   .ficha-tb-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .ficha-tb-import-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 16px;
+  }
+  .modal-overlay.aberto { display: flex; }
+  .modal-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; width: 100%; max-width: 480px; max-height: 82vh; display: flex; flex-direction: column;
+  }
+  .modal-box h3 { margin: 0 0 4px; color: var(--primary); font-size: 1rem; }
+  .modal-box input[type="text"] { margin: 10px 0; }
+  .modal-lista { overflow-y: auto; flex: 1; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+  .modal-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; font-size: 0.85rem;
+    border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .modal-item:last-child { border-bottom: none; }
+  .modal-item:hover { background: var(--surface-2); }
+  .modal-item input[type="checkbox"] { width: 17px; height: 17px; flex-shrink: 0; }
+  .modal-acoes { display: flex; justify-content: flex-end; gap: 10px; }
 
   .relatorio-impresso table.ficha-tb-print { width: 100%; border-collapse: collapse; font-size: 0.68rem; margin-top: 8px; }
   .relatorio-impresso table.ficha-tb-print th, .relatorio-impresso table.ficha-tb-print td { border: 1px solid #999; padding: 3px 4px; text-align: center; }
@@ -349,6 +370,12 @@
 
       <div class="subsection">
         <h3>Animais</h3>
+        <div class="ficha-tb-import-acoes">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('ftb-input-csv-brincos').click()">📥 Importar CSV de brincos</button>
+          <input type="file" id="ftb-input-csv-brincos" accept=".csv,text/csv" style="display:none" onchange="importarBrincosFichaTB()">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="abrirSeletorRebanhoFichaTB()">📋 Puxar do meu rebanho</button>
+        </div>
+        <p id="msg-ficha-tb-import" class="msg"></p>
         <div class="ficha-tb-scroll">
           <table class="ficha-tb-table">
             <thead>
@@ -596,6 +623,19 @@
 </div>
 
 <div id="area-impressao"></div>
+
+<div id="modal-rebanho-ficha" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Selecionar animais do rebanho</h3>
+    <p class="hint">Marque os animais que você quer levar pra Ficha CIDASC. Brinco, raça e sexo são preenchidos sozinhos.</p>
+    <input type="text" id="modal-rebanho-busca" placeholder="Pesquisar por brinco ou apelido..." oninput="renderModalRebanhoLista()">
+    <div id="modal-rebanho-lista" class="modal-lista"></div>
+    <div class="modal-acoes">
+      <button type="button" class="btn btn-secondary" onclick="fecharSeletorRebanhoFichaTB()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="confirmarSeletorRebanhoFichaTB()">Adicionar selecionados</button>
+    </div>
+  </div>
+</div>
 
 <script>
   const CHAVE_STORAGE = 'pecuaria_animais_v2';
@@ -1470,6 +1510,144 @@
 
       corpo.appendChild(tr);
     });
+  }
+
+  // ---------- Ficha CIDASC: trazer animais de fora (CSV de brincos ou rebanho cadastrado) ----------
+  function isLinhaFichaTBVazia(l) {
+    return !l.numero && !l.raca && !l.sexo && !l.a0 && !l.a72 && !l.b0 && !l.b72 &&
+      !l.resultadoTb && !l.colheitaSangue && !l.resultadoBrucelose && !l.obs;
+  }
+
+  function abreviarSexo(sexo) {
+    if (!sexo) return '';
+    const s = sexo.trim().toLowerCase();
+    if (s.startsWith('m')) return 'M';
+    if (s.startsWith('f')) return 'F';
+    return sexo.trim().slice(0, 2);
+  }
+
+  function adicionarAnimalNaFichaTB({ numero, raca, sexo }) {
+    let linha = fichaTB.linhas.find(isLinhaFichaTBVazia);
+    if (!linha) {
+      linha = criarLinhaFichaTBVazia();
+      fichaTB.linhas.push(linha);
+    }
+    linha.numero = numero || '';
+    if (raca) linha.raca = raca;
+    if (sexo) linha.sexo = abreviarSexo(sexo);
+  }
+
+  function importarBrincosFichaTB() {
+    const input = document.getElementById('ftb-input-csv-brincos');
+    const arquivo = input.files[0];
+    const msg = document.getElementById('msg-ficha-tb-import');
+    if (!arquivo) return;
+
+    const leitor = new FileReader();
+    leitor.onload = (evento) => {
+      try {
+        const texto = evento.target.result.replace(/^\uFEFF/, '');
+        const linhasArquivo = texto.split(/\r?\n/).filter(l => l.trim() !== '');
+        if (linhasArquivo.length === 0) throw new Error('arquivo vazio');
+
+        const delimitador = (linhasArquivo[0].split(';').length >= linhasArquivo[0].split(',').length) ? ';' : ',';
+        let inicio = 0;
+        const primeira = linhasArquivo[0].toLowerCase();
+        if (primeira.includes('brinco') || primeira.includes('animal')) inicio = 1;
+
+        let importados = 0;
+        for (let i = inicio; i < linhasArquivo.length; i++) {
+          const c = dividirLinhaCSV(linhasArquivo[i], delimitador);
+          const numero = (c[0] || '').trim();
+          if (!numero) continue;
+          adicionarAnimalNaFichaTB({ numero, raca: (c[1] || '').trim(), sexo: (c[2] || '').trim() });
+          importados++;
+        }
+
+        if (importados === 0) {
+          msg.textContent = 'Nenhum brinco encontrado no arquivo. Cada linha deve começar com o número do brinco.';
+          msg.className = 'msg err';
+          return;
+        }
+
+        salvarFichaTB();
+        renderFichaTBCorpo();
+        input.value = '';
+        msg.textContent = `${importados} brinco(s) importado(s) para a ficha.`;
+        msg.className = 'msg ok';
+      } catch (erro) {
+        msg.textContent = 'Não foi possível ler este arquivo. Confirme que é um .csv válido, com um brinco por linha.';
+        msg.className = 'msg err';
+      }
+    };
+    leitor.readAsText(arquivo, 'UTF-8');
+  }
+
+  let selecaoModalRebanho = new Set();
+
+  function abrirSeletorRebanhoFichaTB() {
+    selecaoModalRebanho = new Set();
+    document.getElementById('modal-rebanho-busca').value = '';
+    renderModalRebanhoLista();
+    document.getElementById('modal-rebanho-ficha').classList.add('aberto');
+  }
+
+  function fecharSeletorRebanhoFichaTB() {
+    document.getElementById('modal-rebanho-ficha').classList.remove('aberto');
+  }
+
+  function renderModalRebanhoLista() {
+    const termo = (document.getElementById('modal-rebanho-busca').value || '').toLowerCase().trim();
+    const lista = document.getElementById('modal-rebanho-lista');
+
+    const filtrados = animais.filter(a => {
+      if (!termo) return true;
+      return (a.brinco && a.brinco.toLowerCase().includes(termo)) || (a.apelido && a.apelido.toLowerCase().includes(termo));
+    });
+
+    if (animais.length === 0) {
+      lista.innerHTML = '<p class="hint" style="padding:12px;">Nenhum animal cadastrado ainda no rebanho.</p>';
+      return;
+    }
+    if (filtrados.length === 0) {
+      lista.innerHTML = '<p class="hint" style="padding:12px;">Nenhum animal encontrado com esse termo.</p>';
+      return;
+    }
+
+    lista.innerHTML = filtrados.map(a => {
+      const nome = a.apelido ? `${escapeHTML(a.apelido)} — ` : '';
+      const brincoTxt = a.brinco ? escapeHTML(a.brinco) : 'sem brinco cadastrado';
+      const detalhes = [a.raca, a.sexo].filter(Boolean).map(escapeHTML).join(' · ');
+      const marcado = selecaoModalRebanho.has(a.id) ? 'checked' : '';
+      return `<label class="modal-item">
+        <input type="checkbox" ${marcado} onchange="alternarSelecaoModalRebanho('${a.id}', this.checked)">
+        <span>${nome}${brincoTxt}${detalhes ? ' · ' + detalhes : ''}</span>
+      </label>`;
+    }).join('');
+  }
+
+  function alternarSelecaoModalRebanho(id, marcado) {
+    if (marcado) selecaoModalRebanho.add(id); else selecaoModalRebanho.delete(id);
+  }
+
+  function confirmarSeletorRebanhoFichaTB() {
+    const msg = document.getElementById('msg-ficha-tb-import');
+    if (selecaoModalRebanho.size === 0) {
+      fecharSeletorRebanhoFichaTB();
+      return;
+    }
+    let adicionados = 0;
+    animais.forEach(a => {
+      if (selecaoModalRebanho.has(a.id)) {
+        adicionarAnimalNaFichaTB({ numero: a.brinco || a.apelido || '', raca: a.raca, sexo: a.sexo });
+        adicionados++;
+      }
+    });
+    salvarFichaTB();
+    renderFichaTBCorpo();
+    fecharSeletorRebanhoFichaTB();
+    msg.textContent = `${adicionados} animal(is) do rebanho adicionado(s) à ficha.`;
+    msg.className = 'msg ok';
   }
 
   function construirHtmlFichaTB() {
