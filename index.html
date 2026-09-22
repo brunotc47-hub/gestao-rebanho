@@ -48,12 +48,12 @@
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; overscroll-behavior-y: contain; }
+  html, body { margin: 0; padding: 0; overscroll-behavior: contain; }
   body {
     background: var(--bg); color: var(--text);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     line-height: 1.45; min-height: 100vh;
-    overscroll-behavior-y: contain;
+    overscroll-behavior: contain;
   }
   .wrap { max-width: 780px; margin: 0 auto; padding: 16px; }
   @media (min-width: 640px) { .wrap { padding: 28px 24px; } }
@@ -76,6 +76,7 @@
     display: flex; gap: 4px; margin-bottom: 20px;
     border-bottom: 1px solid var(--border);
     overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain; touch-action: pan-x;
   }
   nav.tabs::-webkit-scrollbar { display: none; }
   .tab-btn {
@@ -178,6 +179,7 @@
   #resultado-gta {
     background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 14px; font-family: monospace; font-size: 0.85rem; white-space: pre-line; overflow-x: auto;
+    overscroll-behavior-x: contain; touch-action: pan-x;
   }
   .msg { font-size: 0.85rem; margin-top: 10px; }
   .msg.ok { color: var(--primary); }
@@ -226,7 +228,10 @@
   .relatorio-impresso th { background: #eee; }
   .relatorio-impresso .data-emissao { color: #555; font-size: 0.8rem; margin-bottom: 14px; }
 
-  .ficha-tb-scroll { overflow-x: auto; margin-top: 14px; }
+  .ficha-tb-scroll {
+    overflow-x: auto; margin-top: 14px;
+    -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; touch-action: pan-x;
+  }
   table.ficha-tb-table { border-collapse: collapse; width: 100%; min-width: 980px; font-size: 0.75rem; }
   table.ficha-tb-table th, table.ficha-tb-table td { border: 1px solid var(--border); padding: 3px; text-align: center; }
   table.ficha-tb-table th { background: var(--surface-2); font-weight: 600; font-size: 0.68rem; }
