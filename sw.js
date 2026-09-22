@@ -1,5 +1,5 @@
-const CACHE_NAME = 'rebanho-cache-v1';
-const APP_SHELL = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+const CACHE_NAME = 'rebanho-cache-v2';
+const APP_SHELL = ['/', '/manifest.json', '/icon-192.png?v=2', '/icon-512.png?v=2'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
