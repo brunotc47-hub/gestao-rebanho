@@ -431,7 +431,23 @@
           </div>
           <div>
             <label for="raca">Raça</label>
-            <input type="text" id="raca" placeholder="Ex: Nelore, Angus...">
+            <select id="raca" onchange="atualizarCampoRacaOutra()">
+              <option value="">Selecione...</option>
+              <option value="Holandês">Holandês</option>
+              <option value="Jersey">Jersey</option>
+              <option value="Girolando">Girolando</option>
+              <option value="Angus">Angus</option>
+              <option value="Charolês">Charolês</option>
+              <option value="Hereford">Hereford</option>
+              <option value="Braford">Braford</option>
+              <option value="Devon">Devon</option>
+              <option value="Brangus">Brangus</option>
+              <option value="Simental">Simental</option>
+              <option value="Nelore">Nelore</option>
+              <option value="Mestiço/SRD">Mestiço/SRD</option>
+              <option value="Outra">Outra</option>
+            </select>
+            <input type="text" id="raca-outra" placeholder="Digite a raça" style="display:none; margin-top:6px;">
           </div>
           <div>
             <label for="categoria">Categoria</label>
@@ -460,7 +476,7 @@
             <label for="localizacao">Localização atual</label>
             <select id="localizacao">
               <option value="Propriedade Própria">Propriedade Própria</option>
-              <option value="Cooperativa - Campo Natural">Cooperativa (Campo Natural)</option>
+              <option value="Cooperativa - Campo Patural">Cooperativa (Campo Patural)</option>
               <option value="Cooperativa - Campo da Eira">Cooperativa (Campo da Eira)</option>
               <option value="Propriedade de Terceiro">Propriedade de Terceiro</option>
             </select>
@@ -524,9 +540,11 @@
           <p id="preview-previsao-parto" class="field-note"></p>
 
           <h3 style="margin-top:18px;">Histórico de partos anteriores</h3>
+          <p class="hint">Deixe "Data de desmame" em branco enquanto a cria ainda estiver no pé da vaca — o app avisa sozinho até ela completar 8 meses.</p>
           <div class="subrow">
             <input type="text" id="parto-obs" placeholder="Observação (ex: tranquilo, gêmeos, dificuldade)">
-            <input type="date" id="parto-data">
+            <input type="date" id="parto-data" title="Data do parto">
+            <input type="date" id="parto-desmame" title="Data de desmame (se a cria já desmamou)">
             <button type="button" class="btn btn-secondary btn-sm" onclick="adicionarPartoTemp()">Adicionar</button>
           </div>
           <ul id="lista-partos-form" class="subitem-list"></ul>
@@ -565,7 +583,7 @@
     <div class="card">
       <h2>Importação em massa</h2>
       <p class="hint">Cole os dados separados por vírgula, no padrão: <code>Brinco, Apelido, Raça, Categoria, Localização</code></p>
-      <textarea id="texto-csv" rows="6" placeholder="Ex: 420000000000001, Mimosa, Nelore, Vaca, Propriedade Própria&#10;420000000000002, , Angus, Boi, Cooperativa - Campo Natural"></textarea>
+      <textarea id="texto-csv" rows="6" placeholder="Ex: 420000000000001, Mimosa, Nelore, Vaca, Propriedade Própria&#10;420000000000002, , Angus, Boi, Cooperativa - Campo Patural"></textarea>
       <div style="margin-top:14px;">
         <button class="btn btn-primary" onclick="processarImportacao()">Importar dados</button>
       </div>
@@ -581,7 +599,7 @@
       <label for="filtro-gta-local">Filtrar por local de origem</label>
       <select id="filtro-gta-local" onchange="gerarResumoGTA()" style="max-width:340px; margin-bottom:16px;">
         <option value="Propriedade Própria">Propriedade Própria</option>
-        <option value="Cooperativa - Campo Natural">Cooperativa - Campo Natural</option>
+        <option value="Cooperativa - Campo Patural">Cooperativa - Campo Patural</option>
         <option value="Cooperativa - Campo da Eira">Cooperativa - Campo da Eira</option>
         <option value="Propriedade de Terceiro">Propriedade de Terceiro</option>
       </select>
@@ -694,7 +712,10 @@
       animais = [];
     }
     let precisaSalvar = false;
-    animais.forEach(a => { if (!a.id) { a.id = gerarId(); precisaSalvar = true; } });
+    animais.forEach(a => {
+      if (!a.id) { a.id = gerarId(); precisaSalvar = true; }
+      if (a.localizacao === 'Cooperativa - Campo Natural') { a.localizacao = 'Cooperativa - Campo Patural'; precisaSalvar = true; }
+    });
     if (precisaSalvar) salvarLista();
   }
 
@@ -717,6 +738,39 @@
     const div = document.createElement('div');
     div.textContent = texto == null ? '' : String(texto);
     return div.innerHTML;
+  }
+
+  // ---------- Raça (lista suspensa + "Outra") ----------
+  const RACAS_PADRAO = ['Holandês', 'Jersey', 'Girolando', 'Angus', 'Charolês', 'Hereford', 'Braford', 'Devon', 'Brangus', 'Simental', 'Nelore', 'Mestiço/SRD'];
+
+  function atualizarCampoRacaOutra() {
+    const sel = document.getElementById('raca');
+    const outra = document.getElementById('raca-outra');
+    outra.style.display = sel.value === 'Outra' ? 'block' : 'none';
+  }
+
+  function preencherCampoRaca(racaSalva) {
+    const sel = document.getElementById('raca');
+    const outra = document.getElementById('raca-outra');
+    if (racaSalva && RACAS_PADRAO.includes(racaSalva)) {
+      sel.value = racaSalva;
+      outra.style.display = 'none';
+      outra.value = '';
+    } else if (racaSalva) {
+      sel.value = 'Outra';
+      outra.style.display = 'block';
+      outra.value = racaSalva;
+    } else {
+      sel.value = '';
+      outra.style.display = 'none';
+      outra.value = '';
+    }
+  }
+
+  function lerCampoRaca() {
+    const sel = document.getElementById('raca');
+    if (sel.value === 'Outra') return document.getElementById('raca-outra').value.trim();
+    return sel.value;
   }
 
   // ---------- Navegação ----------
@@ -795,6 +849,19 @@
       return { nivel: 'medio', texto: `Ainda não apto para GTA (${idade} de ${IDADE_MINIMA_TERNEIRO_DIAS} dias)` };
     }
     return null;
+  }
+
+  const CRIA_NO_PE_LIMITE_DIAS = 240; // ~8 meses
+
+  function statusCriaNoPe(a) {
+    if (a.sexo !== 'Fêmea' || !a.partos || !a.partos.length) return null;
+    const comData = a.partos.filter(p => p.data && !p.dataDesmame);
+    if (!comData.length) return null;
+    const ultimo = comData.slice().sort((x, y) => x.data.localeCompare(y.data)).pop();
+    const idadeDias = calcularIdadeDias(ultimo.data);
+    if (idadeDias === null || idadeDias < 0 || idadeDias > CRIA_NO_PE_LIMITE_DIAS) return null;
+    const meses = Math.floor(idadeDias / 30);
+    return { nivel: 'ok', texto: `🐄 Cria no pé — nascida há ${meses} ${meses === 1 ? 'mês' : 'meses'} (${formatarDataBR(ultimo.data)})` };
   }
 
   function ultimaCoberturaComData(a) {
@@ -899,12 +966,14 @@
       const statusVacina = statusRB51(a);
       const statusIdade = statusIdadeTerneiro(a);
       const statusParto = statusPrevisaoParto(a);
+      const statusCria = statusCriaNoPe(a);
 
       let badgesHTML = '';
       if (statusExame.nivel) badgesHTML += `<span class="badge-alerta ${statusExame.nivel}">${escapeHTML(statusExame.texto)}</span>`;
       if (statusVacina) badgesHTML += `<span class="badge-alerta ${statusVacina.nivel}">${escapeHTML(statusVacina.texto)}</span>`;
       if (statusIdade) badgesHTML += `<span class="badge-alerta ${statusIdade.nivel}">${escapeHTML(statusIdade.texto)}</span>`;
       if (statusParto && statusParto.nivel) badgesHTML += `<span class="badge-alerta ${statusParto.nivel}">${escapeHTML(statusParto.texto)}</span>`;
+      if (statusCria) badgesHTML += `<span class="badge-alerta ${statusCria.nivel}">${escapeHTML(statusCria.texto)}</span>`;
 
       let pesoHTML = '';
       if (tendenciaPeso) {
@@ -1097,7 +1166,16 @@
     partosEdicao.forEach((p, i) => {
       const li = document.createElement('li');
       li.className = 'subitem';
-      li.innerHTML = `<span>${formatarDataBR(p.data) || 'sem data'}${p.obs ? ' — ' + escapeHTML(p.obs) : ''}</span>`;
+      const statusCria = p.dataDesmame
+        ? ` — desmamada em ${formatarDataBR(p.dataDesmame)}`
+        : ' — 🐄 cria ainda no pé';
+      li.innerHTML = `<span>${formatarDataBR(p.data) || 'sem data'}${p.obs ? ' — ' + escapeHTML(p.obs) : ''}${statusCria}</span>`;
+      if (!p.dataDesmame) {
+        const btnDesmame = document.createElement('button');
+        btnDesmame.type = 'button'; btnDesmame.textContent = '🍼 Marcar desmame hoje'; btnDesmame.className = 'btn btn-secondary btn-sm';
+        btnDesmame.addEventListener('click', () => { p.dataDesmame = hojeISO(); renderPartosEdicao(); });
+        li.appendChild(btnDesmame);
+      }
       const btn = document.createElement('button');
       btn.type = 'button'; btn.textContent = '✕'; btn.title = 'Remover';
       btn.addEventListener('click', () => { partosEdicao.splice(i, 1); renderPartosEdicao(); });
@@ -1109,9 +1187,10 @@
   function adicionarPartoTemp() {
     const obsEl = document.getElementById('parto-obs');
     const dataEl = document.getElementById('parto-data');
+    const desmameEl = document.getElementById('parto-desmame');
     if (!dataEl.value && !obsEl.value.trim()) return;
-    partosEdicao.push({ data: dataEl.value, obs: obsEl.value.trim() });
-    obsEl.value = ''; dataEl.value = '';
+    partosEdicao.push({ data: dataEl.value, obs: obsEl.value.trim(), dataDesmame: desmameEl.value || '' });
+    obsEl.value = ''; dataEl.value = ''; desmameEl.value = '';
     renderPartosEdicao();
   }
 
@@ -1122,7 +1201,7 @@
     const dados = {
       brinco: document.getElementById('brinco').value.trim(),
       apelido: document.getElementById('apelido').value.trim(),
-      raca: document.getElementById('raca').value.trim(),
+      raca: lerCampoRaca(),
       categoria: document.getElementById('categoria').value,
       sexo: document.getElementById('sexo').value,
       dataNascimento: document.getElementById('data-nascimento').value,
@@ -1164,7 +1243,7 @@
     document.getElementById('animal-id').value = a.id;
     document.getElementById('brinco').value = a.brinco || '';
     document.getElementById('apelido').value = a.apelido || '';
-    document.getElementById('raca').value = a.raca || '';
+    preencherCampoRaca(a.raca || '');
     document.getElementById('categoria').value = a.categoria || '';
     document.getElementById('sexo').value = a.sexo || '';
     document.getElementById('data-nascimento').value = a.dataNascimento || '';
@@ -1197,6 +1276,7 @@
   function limparFormulario() {
     document.getElementById('form-animal').reset();
     document.getElementById('animal-id').value = '';
+    preencherCampoRaca('');
     medicacoesEdicao = [];
     coberturasEdicao = [];
     pesagensEdicao = [];
