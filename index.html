@@ -609,6 +609,11 @@
         <option value="Propriedade de Terceiro">Propriedade de Terceiro</option>
       </select>
       <div id="resultado-gta"></div>
+      <div class="ficha-tb-acoes" style="margin-top:14px;">
+        <button type="button" class="btn btn-primary" onclick="imprimirResumoGTA()">🖨️ Imprimir</button>
+        <button type="button" class="btn btn-secondary" onclick="compartilharResumoGTA()">📤 Compartilhar (WhatsApp)</button>
+      </div>
+      <p id="msg-gta" class="msg"></p>
     </div>
   </div>
 
@@ -1349,6 +1354,61 @@
     });
 
     document.getElementById('resultado-gta').textContent = resultado;
+  }
+
+  function imprimirResumoGTA() {
+    const localSelecionado = document.getElementById('filtro-gta-local').value;
+    const filtrados = animais.filter(a => a.localizacao === localSelecionado);
+
+    let html = cabecalhoImpressao('Resumo de lote para GTA');
+    html += linhaDetalhe('Local de origem', localSelecionado);
+    html += linhaDetalhe('Quantidade de animais', String(filtrados.length));
+    html += '<h2>Números dos brincos (15 dígitos)</h2>';
+    if (filtrados.length === 0) {
+      html += '<p>Nenhum animal encontrado nesse local de origem.</p>';
+    } else {
+      html += '<table><tr><th>#</th><th>Brinco</th><th>Nome</th></tr>';
+      filtrados.forEach((a, i) => {
+        html += `<tr><td>${i + 1}</td><td>${escapeHTML(a.brinco) || 'Sem brinco'}</td><td>${escapeHTML(a.apelido) || '-'}</td></tr>`;
+      });
+      html += '</table>';
+    }
+    imprimir(html);
+  }
+
+  async function compartilharResumoGTA() {
+    const msg = document.getElementById('msg-gta');
+    const texto = document.getElementById('resultado-gta').textContent;
+
+    if (!texto.trim()) {
+      msg.textContent = 'Gere o resumo primeiro (selecione o local de origem acima).';
+      msg.className = 'msg err';
+      return;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Resumo de lote para GTA', text: texto });
+        msg.textContent = '';
+        return;
+      } catch (erro) {
+        if (erro && erro.name === 'AbortError') return; // usuário cancelou
+      }
+    }
+
+    // sem suporte a compartilhamento nativo: tenta copiar pra área de transferência
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(texto);
+        msg.textContent = 'Seu navegador não abre o menu de compartilhar direto — copiei o texto, é só colar no WhatsApp.';
+        msg.className = 'msg ok';
+        return;
+      } catch (erro) { /* segue pro fallback de baixar arquivo */ }
+    }
+
+    baixarBlobComoArquivo(new Blob([texto], { type: 'text/plain' }), `resumo-gta-${hojeISO()}.txt`);
+    msg.textContent = 'Não deu pra compartilhar nem copiar direto — baixei um arquivo de texto com o resumo.';
+    msg.className = 'msg ok';
   }
 
   // ---------- Relatórios para impressão ----------
