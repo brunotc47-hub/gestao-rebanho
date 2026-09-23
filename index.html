@@ -243,6 +243,23 @@
   table.ficha-tb-table input:focus, table.ficha-tb-table select:focus { outline: 1px solid var(--focus-ring); background: var(--surface); }
   table.ficha-tb-table td.delta-calc { background: var(--surface-2); color: var(--text-muted); font-family: monospace; }
   .ficha-tb-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+  .wrap { display: none; }
+  body.autenticado .wrap { display: block; }
+  #tela-login {
+    position: fixed; inset: 0; z-index: 200; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  body.autenticado #tela-login { display: none; }
+  .login-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px 24px; width: 100%; max-width: 360px; text-align: center;
+  }
+  .login-box h1 { color: var(--primary); font-size: 1.3rem; margin: 0 0 4px; }
+  .login-box p.hint { margin: 0 0 20px; }
+  .login-box input { margin-bottom: 12px; width: 100%; box-sizing: border-box; }
+  .login-box button { width: 100%; }
+  .login-box .msg { min-height: 18px; }
   .ficha-tb-import-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
@@ -283,13 +300,29 @@
 </head>
 <body>
 
+<div id="tela-login">
+  <div class="login-box">
+    <h1>🐄 Gestão de Rebanho</h1>
+    <p class="hint">Entre com seu usuário e senha para continuar.</p>
+    <form id="form-login" onsubmit="return fazerLogin(event)">
+      <input type="text" id="login-usuario" placeholder="Usuário" autocomplete="username" required>
+      <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" required>
+      <button type="submit" class="btn btn-primary" id="btn-login">Entrar</button>
+      <p id="msg-login" class="msg"></p>
+    </form>
+  </div>
+</div>
+
 <div class="wrap">
   <header class="app-header">
     <div>
       <h1>Gestão de Rebanho 🐄</h1>
       <p>Modo offline — dados salvos neste aparelho</p>
     </div>
-    <span class="badge-local">100% Local</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="badge-local">100% Local</span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="sair()">Sair</button>
+    </div>
   </header>
 
   <nav class="tabs">
@@ -2138,18 +2171,118 @@
   }
 
   // ---------- Inicialização ----------
-  carregarAnimais();
-  mudarAba('animais');
-  atualizarTela();
-  renderMedicacoesEdicao();
-  renderCoberturasEdicao();
-  renderPesagensEdicao();
-  renderPartosEdicao();
-  atualizarVisibilidadeCamposFemea();
-  carregarFichaTB();
-  preencherHeaderFichaTB();
-  ligarHeaderFichaTB();
-  renderFichaTBCorpo();
+  function iniciarApp() {
+    carregarAnimais();
+    mudarAba('animais');
+    atualizarTela();
+    renderMedicacoesEdicao();
+    renderCoberturasEdicao();
+    renderPesagensEdicao();
+    renderPartosEdicao();
+    atualizarVisibilidadeCamposFemea();
+    carregarFichaTB();
+    preencherHeaderFichaTB();
+    ligarHeaderFichaTB();
+    renderFichaTBCorpo();
+    iniciarChecagemPeriodicaSessao();
+  }
+
+  // ---------- Login / sessão ----------
+  const FLAG_SESSAO_LOCAL = 'rebanho_sessao_confirmada';
+
+  function liberarAcessoAoApp() {
+    document.body.classList.add('autenticado');
+    localStorage.setItem(FLAG_SESSAO_LOCAL, '1');
+    iniciarApp();
+  }
+
+  function exigirLogin(mensagem) {
+    localStorage.removeItem(FLAG_SESSAO_LOCAL);
+    document.body.classList.remove('autenticado');
+    const msg = document.getElementById('msg-login');
+    if (mensagem) { msg.textContent = mensagem; msg.className = 'msg err'; }
+    const campoUsuario = document.getElementById('login-usuario');
+    if (campoUsuario) campoUsuario.focus();
+  }
+
+  async function verificarSessaoInicial() {
+    try {
+      const resp = await fetch('/api/sessao', { cache: 'no-store' });
+      const dados = await resp.json();
+      if (dados.autenticado) {
+        liberarAcessoAoApp();
+      } else if (localStorage.getItem(FLAG_SESSAO_LOCAL) === '1') {
+        // Já tinha logado certo neste aparelho antes, e agora a sessão não bate
+        // (provavelmente porque entraram com esse usuário em outro aparelho).
+        exigirLogin('Sua sessão foi encerrada porque esse usuário entrou em outro aparelho.');
+      } else {
+        exigirLogin('');
+      }
+    } catch {
+      // Sem internet pra checar: se esse aparelho já confirmou login antes, deixa
+      // usar offline normalmente (é assim que o app funciona no campo, sem sinal).
+      if (localStorage.getItem(FLAG_SESSAO_LOCAL) === '1') {
+        document.body.classList.add('autenticado');
+        iniciarApp();
+      } else {
+        exigirLogin('Sem conexão com a internet. É preciso estar online pra entrar pela primeira vez neste aparelho.');
+      }
+    }
+  }
+
+  async function fazerLogin(evento) {
+    evento.preventDefault();
+    const usuario = document.getElementById('login-usuario').value.trim();
+    const senha = document.getElementById('login-senha').value;
+    const msg = document.getElementById('msg-login');
+    const btn = document.getElementById('btn-login');
+    msg.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Entrando...';
+    try {
+      const resp = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, senha }),
+      });
+      const dados = await resp.json();
+      if (dados.ok) {
+        liberarAcessoAoApp();
+      } else {
+        msg.textContent = dados.erro || 'Usuário ou senha incorretos.';
+        msg.className = 'msg err';
+      }
+    } catch {
+      msg.textContent = 'Sem conexão com a internet. Conecte-se e tente de novo.';
+      msg.className = 'msg err';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+    }
+    return false;
+  }
+
+  async function sair() {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch { /* segue mesmo sem internet */ }
+    localStorage.removeItem(FLAG_SESSAO_LOCAL);
+    document.body.classList.remove('autenticado');
+    location.reload();
+  }
+
+  function iniciarChecagemPeriodicaSessao() {
+    setInterval(async () => {
+      try {
+        const resp = await fetch('/api/sessao', { cache: 'no-store' });
+        const dados = await resp.json();
+        if (!dados.autenticado) {
+          alert('Sua sessão foi encerrada porque esse usuário entrou em outro aparelho.');
+          location.reload();
+        }
+      } catch { /* sem internet agora: mantém a sessão local, não derruba ninguém */ }
+    }, 120000); // confere a cada 2 minutos
+  }
+
+  verificarSessaoInicial();
 </script>
 
 <script>

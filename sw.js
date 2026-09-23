@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rebanho-cache-v3';
+const CACHE_NAME = 'rebanho-cache-v4';
 const APP_SHELL = ['/', '/manifest.json', '/icon-192-v2.png', '/icon-512-v2.png'];
 
 self.addEventListener('install', (event) => {
@@ -22,6 +22,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  if (url.pathname.startsWith('/api/')) {
+    return; // chamadas de login/sessão: sempre direto na rede, nunca em cache
+  }
 
   const ehPaginaPrincipal = req.mode === 'navigate' ||
     (req.headers.get('accept') || '').includes('text/html');
