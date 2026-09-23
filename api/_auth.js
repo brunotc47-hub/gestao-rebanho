@@ -1,34 +1,24 @@
 // Funções auxiliares de autenticação, compartilhadas pelas rotas de login/sessão/logout.
 // Arquivos começando com "_" não viram rotas públicas na Vercel.
+import crypto from 'node:crypto';
 
 export const NOME_COOKIE = 'rebanho_sessao';
 export const CHAVE_BLOB = 'sessao-ativa.json';
 
-export async function sha256Hex(texto) {
-  const dados = new TextEncoder().encode(texto);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', dados);
-  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+export function sha256Hex(texto) {
+  return crypto.createHash('sha256').update(texto, 'utf8').digest('hex');
 }
 
-export async function hmacHex(chaveTexto, mensagem) {
-  const chave = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(chaveTexto),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const assinatura = await crypto.subtle.sign('HMAC', chave, new TextEncoder().encode(mensagem));
-  return Array.from(new Uint8Array(assinatura)).map((b) => b.toString(16).padStart(2, '0')).join('');
+export function hmacHex(chaveTexto, mensagem) {
+  return crypto.createHmac('sha256', chaveTexto).update(mensagem, 'utf8').digest('hex');
 }
 
 export function gerarToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return crypto.randomBytes(24).toString('hex');
 }
 
 export function lerCookie(req, nome) {
-  const cabecalho = req.headers.get('cookie') || '';
+  const cabecalho = req.headers.cookie || '';
   const partes = cabecalho.split(';').map((p) => p.trim());
   for (const parte of partes) {
     const idx = parte.indexOf('=');
@@ -49,7 +39,7 @@ export async function validarSessao(req) {
   const [token, assinatura] = valorCookie.split('.');
   if (!token || !assinatura) return { autenticado: false };
 
-  const assinaturaEsperada = await hmacHex(process.env.AUTH_COOKIE_SECRET || '', token);
+  const assinaturaEsperada = hmacHex(process.env.AUTH_COOKIE_SECRET || '', token);
   if (assinatura !== assinaturaEsperada) return { autenticado: false };
 
   try {

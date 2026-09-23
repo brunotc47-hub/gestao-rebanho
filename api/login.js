@@ -1,19 +1,12 @@
 import { NOME_COOKIE, CHAVE_BLOB, sha256Hex, hmacHex, gerarToken } from './_auth.js';
 
-export const config = { runtime: 'edge' };
-
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ ok: false, erro: 'Método não permitido' }), { status: 405 });
+    res.status(405).json({ ok: false, erro: 'Método não permitido' });
+    return;
   }
 
-  let corpo;
-  try {
-    corpo = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ ok: false, erro: 'Requisição inválida' }), { status: 400 });
-  }
-
+  const corpo = req.body || {};
   const usuario = (corpo.usuario || '').trim().toLowerCase();
   const senha = corpo.senha || '';
 
@@ -23,19 +16,15 @@ export default async function handler(req) {
   const cookieSecret = process.env.AUTH_COOKIE_SECRET || '';
 
   if (!usuario || !senha || !usuarioEsperado || !hashEsperado || !pepper || !cookieSecret) {
-    return new Response(JSON.stringify({ ok: false, erro: 'Usuário ou senha incorretos.' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    res.status(401).json({ ok: false, erro: 'Usuário ou senha incorretos.' });
+    return;
   }
 
-  const hashCalculado = await sha256Hex(`${pepper}:${senha}`);
+  const hashCalculado = sha256Hex(`${pepper}:${senha}`);
 
   if (usuario !== usuarioEsperado || hashCalculado !== hashEsperado) {
-    return new Response(JSON.stringify({ ok: false, erro: 'Usuário ou senha incorretos.' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    res.status(401).json({ ok: false, erro: 'Usuário ou senha incorretos.' });
+    return;
   }
 
   const token = gerarToken();
@@ -50,23 +39,17 @@ export default async function handler(req) {
       token: process.env.BLOB_READ_WRITE_TOKEN,
       cacheControlMaxAge: 0,
     });
-  } catch {
-    return new Response(JSON.stringify({ ok: false, erro: 'Não foi possível iniciar a sessão. Tente novamente.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  } catch (erro) {
+    res.status(500).json({ ok: false, erro: 'Não foi possível iniciar a sessão. Tente novamente.' });
+    return;
   }
 
-  const assinatura = await hmacHex(cookieSecret, token);
+  const assinatura = hmacHex(cookieSecret, token);
   const valorCookie = `${token}.${assinatura}`;
 
-  const resposta = new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-  resposta.headers.append(
+  res.setHeader(
     'Set-Cookie',
     `${NOME_COOKIE}=${encodeURIComponent(valorCookie)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`
   );
-  return resposta;
+  res.status(200).json({ ok: true });
 }
